@@ -1,0 +1,4 @@
+interface:
+  display_name: "Proxy Subscription SSH"
+  short_description: "Configure a remote proxy from a local subscription"
+  default_prompt: "Parse a Clash subscription locally, transfer a minimal config over SSH, start a loopback proxy, and verify downloads."

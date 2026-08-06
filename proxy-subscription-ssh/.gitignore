@@ -1,0 +1,5 @@
+proxy-subscription.yaml
+proxy-minimal.yaml
+mihomo.log
+*.log
+__pycache__/
