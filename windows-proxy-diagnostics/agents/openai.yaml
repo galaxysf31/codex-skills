@@ -1,0 +1,4 @@
+interface:
+  display_name: "Windows Proxy Diagnostics"
+  short_description: "Diagnose DNS, TLS, and local proxy routing failures"
+  default_prompt: "Use $windows-proxy-diagnostics to determine whether this Windows network failure is caused by DNS, direct routing, or proxy bypass."
