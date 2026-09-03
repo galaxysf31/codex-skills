@@ -1,0 +1,3 @@
+interface:
+  display_name: "Codex Third Party Provider"
+  short_description: "Configure third-party Codex model gateways"
