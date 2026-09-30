@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex Remote Handoff"
-  short_description: "Continue local Codex work on an always-on SSH host"
-  default_prompt: "Use $codex-remote-handoff to fork this task and continue it on my configured remote Codex host."
+  short_description: "Keep Codex work running remotely and reopen it in Desktop"
+  default_prompt: "Use $codex-remote-handoff to keep this task running on my persistent remote Codex host and make it reopenable in Desktop."
