@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex Remote Handoff"
-  short_description: "Keep Codex work running remotely and reopen it in Desktop"
-  default_prompt: "Use $codex-remote-handoff to keep this task running on my persistent remote Codex host and make it reopenable in Desktop."
+  short_description: "Keep Codex CLI running remotely in tmux"
+  default_prompt: "Use $codex-remote-handoff to move this task and its essential context into a persistent Codex CLI session in tmux on my SSH host."

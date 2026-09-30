@@ -1,91 +1,87 @@
 ---
 name: codex-remote-handoff
-description: Keep a Codex task running on an always-on SSH host and reopen the same remote chat in Codex Desktop after the local computer restarts. Use when the user is shutting down, going offline, reconnecting to overnight work, or wants local conversational context continued on a persistent remote Codex host. Supports Git Handoff and non-Git remote continuation chats.
+description: Move the active task and its essential context to Codex CLI in tmux on an always-on SSH host, keep it running after the local computer shuts down, and reconnect to the same remote terminal later. Use for overnight or unattended remote continuation without depending on Codex Desktop runtime or a Git repository.
 ---
 
 # Codex Remote Handoff
 
-Make the remote machine the owner of the Codex runtime, session history, files, and execution. Codex Desktop on the user's computer is only a client that may disconnect and later reopen the same remote chat. Invoking this skill for a current task authorizes creating one continuation chat, starting it on the requested remote host, and sending it a continuation prompt. It does not authorize unrelated infrastructure changes or publishing code.
+Continue the current task in a persistent Codex CLI session owned entirely by the remote SSH host. Codex Desktop may initiate the handoff, but after launch the desktop process, its SSH connection, and the local computer are not required.
+
+This workflow creates a new remote CLI conversation seeded with a self-contained handoff packet. It does not migrate the current chat's internal thread state, and the remote CLI session will not appear as a normal Codex Desktop chat.
 
 Default personal target when the user does not name another host:
 
 - SSH alias: `ecs-0904`
-- Codex host ID: `remote-ssh-discovered:ecs-0904`
+- Host address: `47.85.15.56`
 - Remote folder: `/root/codex_project`
 
-## Required architecture
+## Prepare the handoff
 
-The remote host must run the Codex remote-control/app-server daemon independently of the desktop's SSH process. Before dispatching work:
+1. Confirm SSH access and inspect the exact target directory without modifying unrelated files.
+2. Verify `tmux`, Codex CLI, and `codex login status` on the remote host. If anything is missing, read [references/host-setup.md](references/host-setup.md) and prepare only the missing prerequisite.
+3. Check for an existing tmux session or handoff manifest for the same task. Reattach or resume it instead of creating a duplicate.
+4. Build a self-contained Markdown handoff packet containing:
+   - the user's objective and observable definition of done;
+   - relevant conversational context, decisions, constraints, paths, and environment facts;
+   - work already completed and its verification evidence;
+   - remaining work, blockers, and the exact next action;
+   - authorization boundaries and any actions that still require the user;
+   - instructions to work autonomously, verify the outcome, and stop for genuine blockers.
 
-1. Inspect projects and hosts with the Codex app tools.
-2. Over SSH, confirm Codex authentication and run `codex remote-control start --json`. A successful call should leave the managed app-server daemon running on the remote host.
-3. From a separate SSH command, verify the daemon and its proxy are alive independently of the command that started them. Prefer service/daemon status when available; otherwise verify the app-server process has a long-lived manager such as PID 1 rather than the interactive SSH shell.
-4. Confirm the desktop app has a saved project whose `hostId` is the requested host.
+Never place tokens, passwords, private keys, pairing codes, or raw authentication files in the packet. Copy needed project files separately and explicitly; conversational context alone does not transfer local files.
 
-If any prerequisite is missing, read [references/host-setup.md](references/host-setup.md) and prepare only the missing pieces. `remote-control` is experimental, so observable liveness is required; command exit status alone is insufficient.
+## Start the remote CLI session
 
-`remote-control start` is not idempotent when an app-server launched by another mechanism already owns its control socket. If it reports that the running app-server is not managed by the daemon, inspect remote threads first. Never kill or replace that process while a remote thread is active. Treat the host as not yet safe for unattended shutdown until a controlled daemon transition can be completed.
+Use a short unique tmux name derived from the task, such as `codex-<topic>-<date>`. Store the packet and a small manifest under a task-specific directory inside `/root/codex_project/.handoffs/`. The manifest should record the tmux name, working directory, packet path, start time, and known Codex session ID when available.
 
-Do not expose app-server WebSocket or Unix-socket transports to a public network. Do not use an ordinary `tmux` Codex TUI as the primary route: it survives shutdown but does not become a normal Desktop chat.
+Start a detached tmux session in the intended working directory and launch interactive Codex CLI there. Prefer the normal sandbox and non-blocking approval policy appropriate to the task, for example:
 
-## Send work to the remote host
+```bash
+tmux new-session -d -s "$session_name" -c "$work_dir" \
+  'exec codex --no-alt-screen --ask-for-approval never --sandbox workspace-write'
+```
 
-Prefer **Fork and hand off** when the app offers a valid Git destination. Use **Non-Git continuation** when the project is not a Git repository, no matching repository exists on the destination, or only conversational context is required.
+Do not use `--dangerously-bypass-approvals-and-sandbox` unless the user explicitly requests that risk and the remote environment is externally isolated. Add writable directories or web search only when the task needs them.
 
-Never initialize a Git repository merely to make Handoff available. Do not claim that a new continuation chat is the same thread.
+After the TUI is ready, paste the handoff packet into the tmux pane as literal input rather than interpolating it into a shell command. For a long-running objective on a CLI version that supports Goals, submit a scoped `/goal` containing the objective, completion evidence, constraints, and a sensible budget, then tell Codex to begin. Goals continue at safe idle boundaries; they are not an unconditional infinite loop.
 
-## Fork and hand off
+Use `tmux load-buffer`/`paste-buffer` or another literal-input mechanism so Markdown punctuation cannot execute as shell syntax. Do not put the packet on the remote process command line, where it may be exposed or damaged by quoting.
 
-The calling chat cannot hand itself off. Preserve its full history by forking it first:
+## Verify before local shutdown
 
-1. Fork the calling chat with `fork_thread`, using the same-directory environment unless the user explicitly requests a worktree.
-2. Hand the child chat to the target with `handoff_thread`. Include a short `followUpPrompt` that tells the child to continue the active objective autonomously on the remote host, verify its work, and report blockers only when user input is genuinely required.
-3. Follow the handoff with `get_handoff_status`. Use a 30–60 second long poll and back off when the revision does not change; do not busy-poll.
-4. Confirm completion only when the destination host is the requested remote host, the continuation turn has started, and the persistent remote daemon remains healthy. Return the child chat identity and the remote host to the user.
+From a fresh SSH connection, verify all of the following:
 
-If Handoff fails because there is no compatible Git project, switch to the non-Git path instead of retrying the same operation.
+- the named tmux session exists and is detached or attachable;
+- the pane contains a live `codex` process, not only a shell or stale tmux server;
+- the first task turn or Goal has started and is not waiting for approval or missing input;
+- the handoff packet and all required files exist on the remote host;
+- the remote host can reach the required services;
+- a second fresh SSH connection can capture the pane without relying on the initiating connection.
 
-## Non-Git continuation
+Report the SSH alias, tmux session name, remote working directory, current status, and the exact reconnect command. Do not say shutdown is safe until every check passes.
 
-Create a new UI-visible chat directly in the saved remote project:
+## Reconnect or recover
 
-1. Use `list_projects` to select the saved project whose `hostId` is the target host. Prefer `/root/codex_project` for the default target. Do not silently select a different host.
-2. Build a self-contained handoff packet from the current conversation. Include:
-   - the user's concrete objective and definition of done;
-   - decisions, constraints, credentials already configured (without secret values), and relevant paths;
-   - completed work and observable verification results;
-   - remaining steps, current blockers, and the exact next action;
-   - instructions to continue on the remote host and remain within the original authorization scope.
-3. Call `create_thread` for that remote project with `environment: { type: "local" }`. The skill invocation counts as the user's explicit request for this one continuation chat. Use the handoff packet as the prompt and give the chat a concise title related to the task.
-4. Call `wait_threads` so the remote thread is confirmed running or reports a real need for attention.
-5. If an earlier fork was created but could not be handed off, archive that abandoned fork after the remote continuation exists; never delete it.
-6. In the final response, emit the product's created-thread directive and state clearly that this is a context-preserving continuation chat, not an identical migrated thread.
+Reconnect directly from any terminal with:
 
-After the thread starts, check the remote daemon again through a fresh SSH connection. Do not stop the daemon after dispatch.
+```bash
+ssh -t ecs-0904 'tmux attach -t <session-name>'
+```
 
-## Reopen remote work from the desktop
+Detaching with `Ctrl-b d` leaves the remote task running. Closing the local terminal or powering off the local computer does not stop a healthy detached tmux session.
 
-When the user returns and asks to view or continue remote work:
+If tmux is alive but Codex is idle, attach and continue in that same TUI. If the Codex process exited, do not claim the task is still running. From the recorded working directory, resume the persisted remote conversation by its recorded ID when available:
 
-1. Confirm the target SSH host and remote-control daemon are online.
-2. Use `list_threads` to locate recent chats associated with the target host/project. Match by exact title and host before using recency; do not guess when multiple chats are plausible.
-3. Use `read_thread` or a zero-timeout `wait_threads` snapshot to report its current state.
-4. Use `navigate_to_codex_page` when the user asks to open it. The chat continues to execute on the remote host even though it is displayed in the local Desktop app.
-5. If the chat is missing, repair the SSH connection or daemon first. Do not create a duplicate continuation unless the user requests one or the original is unrecoverable.
+```bash
+codex resume <session-id>
+```
 
-Reopening the chat is not a handoff back to local execution. Keep it attached to the remote host unless the user explicitly asks to migrate execution and the destination is supported.
+If no ID was recorded, use the interactive `codex resume` picker or, only when unambiguous in that working directory, `codex resume --last`. Codex session history lives on the remote host, so resume commands must run there under the same remote user and `CODEX_HOME`.
 
-## Completion criteria
+## Boundaries
 
-Before saying the user may power off the local computer, verify all of the following:
-
-- the remote host is online and authenticated;
-- `codex remote-control` has a persistent, independently verified daemon;
-- the continuation chat is attached to the requested remote host/project;
-- the continuation prompt contains enough context to proceed without the local machine;
-- the remote chat has started and does not need an unresolved approval or local-only resource;
-- any files the task needs already exist on the remote host or are explicitly out of scope.
-
-Report the remote chat title, thread identity, host, project path, daemon status, current task status, and how the user can reopen it. If any criterion is unmet, say that shutdown is not yet safe and identify the exact missing condition.
-
-An ordinary detached `tmux` CLI session may be used only when the user explicitly accepts losing normal Desktop-chat visibility. Never describe that fallback as satisfying this skill's UI reconnection outcome.
+- No Git repository is required. Do not initialize one solely for this workflow.
+- Do not use Desktop `remote-control`, app-server handoff, `fork_thread`, or `create_thread` for the CLI-persistent path.
+- Do not expose tmux, SSH, app-server, or Unix sockets publicly.
+- A CLI session can be viewed in a Desktop terminal panel, but it is not a native Desktop chat and cannot be navigated to as one.
+- Moving execution back to the local computer is a separate context/file handoff, not a transparent migration of the live remote process.
