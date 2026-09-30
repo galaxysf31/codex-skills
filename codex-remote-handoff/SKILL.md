@@ -78,10 +78,24 @@ codex resume <session-id>
 
 If no ID was recorded, use the interactive `codex resume` picker or, only when unambiguous in that working directory, `codex resume --last`. Codex session history lives on the remote host, so resume commands must run there under the same remote user and `CODEX_HOME`.
 
+## Return the task to the local computer
+
+Treat the return as another context-and-files handoff, not as live process migration:
+
+1. Attach to the remote tmux session and inspect the current turn, Goal, modified files, and any pending tool or approval request. Wait for a safe turn boundary; do not interrupt an active write or deployment.
+2. Pause an active Goal with `/goal pause` so the remote agent cannot continue changing files after the handoff snapshot.
+3. Ask the remote Codex session to write a redacted return packet under its task-specific `.handoffs/` directory. It must contain the original objective, current status, decisions, commands and evidence, changed-file inventory, unresolved blockers, and the exact next action. Record the remote Codex session ID for rollback or later inspection.
+4. Transfer the return packet and every required changed artifact to explicit local paths. Prefer normal version-control transfer when a repository already exists. For non-Git work, copy only the reviewed task directory or enumerated files with SSH/SCP/rsync; never copy remote `~/.codex`, credentials, caches, or unrelated home-directory contents.
+5. Verify local file hashes or at least sizes and modification times for material artifacts before starting local work. Do not delete or overwrite unrelated local files; resolve collisions explicitly.
+6. Continue from a local Codex chat or CLI session using the return packet as the first context. State clearly that this is a new local conversation carrying forward the remote task state, not the same internal thread.
+7. Verify the local agent can read the required files and restates the correct objective and next action. Only then stop or archive the remote tmux session if the user wants it retired. Keeping a paused remote session temporarily provides a rollback point.
+
+If the user invokes this skill from a local Codex chat with a named remote tmux session, perform these checks and retrieve the return packet into the current task when safe. Do not start a second writer against the same files while the remote Goal remains active.
+
 ## Boundaries
 
 - No Git repository is required. Do not initialize one solely for this workflow.
 - Do not use Desktop `remote-control`, app-server handoff, `fork_thread`, or `create_thread` for the CLI-persistent path.
 - Do not expose tmux, SSH, app-server, or Unix sockets publicly.
 - A CLI session can be viewed in a Desktop terminal panel, but it is not a native Desktop chat and cannot be navigated to as one.
-- Moving execution back to the local computer is a separate context/file handoff, not a transparent migration of the live remote process.
+- Moving execution back to the local computer is a separate context/file handoff; preserve the paused remote session until local continuation is verified.
