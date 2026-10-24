@@ -1,0 +1,4 @@
+interface:
+  display_name: "英语作文阅卷"
+  short_description: "按教师样本校准英语作文评分，逐篇核对提交结果并生成班级写作反馈"
+  default_prompt: "使用 $english-essay-marking，根据本次作文题目和我已评分的样本校准尺度，批改剩余作文；按我的授权提交分数，并总结学生的写作优点、共性问题和教学建议。"
